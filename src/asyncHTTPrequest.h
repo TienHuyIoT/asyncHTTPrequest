@@ -131,7 +131,8 @@ class asyncHTTPrequest {
     bool    send(const uint8_t* buffer, size_t len);                // Send the request (POST) (binary data?)
     bool    send(xbuf* body, size_t len);                            // Send the request (POST) data in an xbuf
     void    abort();                                                // Abort the current operation
-    
+    void    close();
+
     int     readyState();                                           // Return the ready state
 
     int     respHeaderCount();                                      // Retrieve count of response headers

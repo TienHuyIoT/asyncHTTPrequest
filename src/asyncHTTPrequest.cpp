@@ -91,7 +91,7 @@ bool	asyncHTTPrequest::open(const char* method, const char* URL){
       (strcmp(_URL->host, _connectedHost) != 0 || _URL->port != _connectedPort)){return false;}
     char* hostName = new char[strlen(_URL->host)+10];
     sprintf(hostName,"%s:%d", _URL->host, _URL->port);  
-    _addHeader("host",hostName);
+    _addHeader("Host",hostName);
     delete[] hostName;
     _lastActivity = millis();
 	return _connect();
@@ -184,6 +184,13 @@ void    asyncHTTPrequest::abort(){
     _seize;
     if(! _client) return;
     _client->abort();
+    _release;
+}
+void    asyncHTTPrequest::close(){
+    DEBUG_HTTP("close()\r\n");
+    _seize;
+    if(! _client) return;
+    _client->close();
     _release;
 }
 //**************************************************************************************************************
@@ -405,7 +412,7 @@ bool   asyncHTTPrequest::_buildRequest(){
     header* hdr = _headers;
     while(hdr){
         _request->write(hdr->name);
-        _request->write(':');
+        _request->write(": ");
         _request->write(hdr->value);
         _request->write("\r\n");
         hdr = hdr->next;
