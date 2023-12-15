@@ -33,7 +33,10 @@ asyncHTTPrequest::asyncHTTPrequest()
 
 //**************************************************************************************************************
 asyncHTTPrequest::~asyncHTTPrequest(){
-    if(_client) _client->close(true);
+    if(_client) {
+        _client->close(true);
+        delete _client;
+    }
     delete _URL;
     delete _headers;
     delete _request;
@@ -135,7 +138,7 @@ bool    asyncHTTPrequest::send(String body){
 
 //**************************************************************************************************************
 bool	asyncHTTPrequest::send(const char* body){
-    DEBUG_HTTP("send(char*) %s.16... (%d)\r\n",body, strlen(body));
+    DEBUG_HTTP("send(char*) %.16s... (%d)\r\n",body, strlen(body));
     _seize;
     _addHeader("Content-Length", String(strlen(body)).c_str());
     if( ! _buildRequest()){
@@ -150,7 +153,7 @@ bool	asyncHTTPrequest::send(const char* body){
 
 //**************************************************************************************************************
 bool	asyncHTTPrequest::send(const uint8_t* body, size_t len){
-    DEBUG_HTTP("send(char*) %s.16... (%d)\r\n",(char*)body, len);
+    DEBUG_HTTP("send(char*) %.16s... (%d)\r\n",(char*)body, len);
     _seize;
     _addHeader("Content-Length", String(len).c_str());
     if( ! _buildRequest()){
@@ -165,7 +168,7 @@ bool	asyncHTTPrequest::send(const uint8_t* body, size_t len){
 
 //**************************************************************************************************************
 bool	asyncHTTPrequest::send(xbuf* body, size_t len){
-    DEBUG_HTTP("send(char*) %s.16... (%d)\r\n", body->peekString(16).c_str(), len);
+    DEBUG_HTTP("send(char*) %.16s... (%d)\r\n", body->peekString(16).c_str(), len);
     _seize;
     _addHeader("Content-Length", String(len).c_str());
     if( ! _buildRequest()){
@@ -182,15 +185,17 @@ bool	asyncHTTPrequest::send(xbuf* body, size_t len){
 void    asyncHTTPrequest::abort(){
     DEBUG_HTTP("abort()\r\n");
     _seize;
-    if(! _client) return;
-    _client->abort();
+    if(_client) {
+        _client->abort();
+    }
     _release;
 }
 void    asyncHTTPrequest::close(){
     DEBUG_HTTP("close()\r\n");
     _seize;
-    if(! _client) return;
-    _client->close();
+    if(_client) {
+        _client->close();
+    }
     _release;
 }
 //**************************************************************************************************************
@@ -373,7 +378,7 @@ bool  asyncHTTPrequest::_connect(){
     if( ! _client){
         _client = new AsyncClient();
     }
-    delete[] _connectedHost;	
+    delete[] _connectedHost;
     _connectedHost = new char[strlen(_URL->host) + 1];
     strcpy(_connectedHost, _URL->host);
     _connectedPort = _URL->port;

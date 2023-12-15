@@ -73,9 +73,9 @@ class asyncHTTPrequest {
         {};
 	  ~header()
     {
-        delete[] name; 
-        delete[] value; 
-        delete next;
+        if (name != nullptr) delete[] name; 
+        if (value != nullptr) delete[] value; 
+        if (next != nullptr) delete next;
     }
   };
 
