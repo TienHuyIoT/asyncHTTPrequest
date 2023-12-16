@@ -96,7 +96,10 @@ class asyncHTTPrequest {
         {};
       ~URL()
       {
-        delete[] buffer;
+        if (buffer) {
+          delete[] buffer;
+          buffer = nullptr;
+        }
       }
     };
 
@@ -215,6 +218,7 @@ class asyncHTTPrequest {
     void        _onData(void*, size_t);
     void        _onError(AsyncClient*, int8_t);
     void        _onPoll(AsyncClient*);
+    void        _onTimeout(AsyncClient*, uint32_t);
     bool        _collectHeaders();
 };
 #endif 

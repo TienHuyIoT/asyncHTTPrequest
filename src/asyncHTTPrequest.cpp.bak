@@ -897,6 +897,7 @@ asyncHTTPrequest::header*  asyncHTTPrequest::_addHeader(const char* name, const 
     _seize;
     header* hdr = (header*) &_headers;
     while(hdr->next) {
+        DEBUG_HTTP("hdr->next %u\r\n", hdr->next);
         if(strcasecmp(name, hdr->next->name) == 0){
             header* oldHdr = hdr->next;
             hdr->next = hdr->next->next;
