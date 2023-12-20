@@ -213,27 +213,6 @@ void    asyncHTTPrequest::close(){
         _client->close();
         delete _client;
         _client = nullptr;
-
-        if (_URL) {
-            delete _URL;
-            _URL = nullptr;
-        }
-        if (_headers) {
-            delete _headers;
-            _headers = nullptr;
-        }
-        if (_request) {
-            delete _request;
-            _request = nullptr;
-        }
-        if (_response) {
-            delete _response;
-            _response = nullptr;
-        }
-        if (_chunks) {
-            delete _chunks;
-            _chunks = nullptr;
-        }
     }
     _release;
 }
@@ -537,7 +516,6 @@ void  asyncHTTPrequest::_processChunks(){
             }
             _requestEndTime = millis();
             _lastActivity = 0;
-            // _timeout = 0;
             _setReadyState(readyStateDone);
             return;
         }
@@ -633,6 +611,11 @@ void  asyncHTTPrequest::_onData(void* Vbuf, size_t len){
     DEBUG_HTTP("_onData handler %.16s... (%d)\r\n",(char*) Vbuf, len);
     _seize;
     _lastActivity = millis();
+
+    if (!_response) {
+        _release;  
+        return;
+    }
     
                 // Transfer data to xbuf
 
@@ -648,7 +631,10 @@ void  asyncHTTPrequest::_onData(void* Vbuf, size_t len){
                 // if still not complete, just return.
 
     if(_readyState == readyStateOpened){
-        if( ! _collectHeaders()) return;
+        if( ! _collectHeaders()) {
+            _release;  
+            return;
+        }
     }
 
                 // If there's data in the buffer and not Done,
