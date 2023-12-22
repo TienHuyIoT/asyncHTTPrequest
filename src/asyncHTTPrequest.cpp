@@ -506,8 +506,8 @@ void  asyncHTTPrequest::_processChunks(){
         size_t chunkLength = strtol(chunkHeader.c_str(),nullptr,16);
         _contentLength += chunkLength;
         if(chunkLength == 0){
-            char* connectionHdr = respHeaderValue("connection");
-            if(connectionHdr && (strcasecmp_P(connectionHdr,PSTR("disconnect")) == 0)){
+            char* connectionHdr = respHeaderValue("Connection");
+            if(connectionHdr && (strcasecmp_P(connectionHdr,PSTR("close")) == 0)){
                 DEBUG_HTTP("*all chunks received - closing TCP\r\n");
                 _client->close();
             }
@@ -647,8 +647,8 @@ void  asyncHTTPrequest::_onData(void* Vbuf, size_t len){
                 // If not chunked and all data read, close it up.
 
     if( ! _chunked && (_response->available() + _contentRead) >= _contentLength){
-        char* connectionHdr = respHeaderValue("connection");
-        if(connectionHdr && (strcasecmp_P(connectionHdr,PSTR("disconnect")) == 0)){
+        char* connectionHdr = respHeaderValue("Connection");
+        if(connectionHdr && (strcasecmp_P(connectionHdr,PSTR("close")) == 0)){
             DEBUG_HTTP("*all data received - closing TCP\r\n");
             _client->close();
         }
