@@ -211,8 +211,6 @@ void    asyncHTTPrequest::close(){
     _seize;
     if(_client) {
         _client->close();
-        delete _client;
-        _client = nullptr;
     }
     _release;
 }
@@ -562,8 +560,6 @@ void  asyncHTTPrequest::_onPoll(AsyncClient* client){
     if(_timeout && (millis() - _lastActivity) > (_timeout * 1000)){
         if (_client) {
             _client->close();
-            delete _client;
-            _client = nullptr;
         }
         _HTTPcode = HTTPCODE_TIMEOUT;
         DEBUG_HTTP("_onPoll timeout\r\n");
