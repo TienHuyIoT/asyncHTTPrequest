@@ -34,8 +34,10 @@ asyncHTTPrequest::asyncHTTPrequest()
 //**************************************************************************************************************
 asyncHTTPrequest::~asyncHTTPrequest(){
     if(_client) {
-        _client->close(true);
-        delete _client;
+        AsyncClient* c = _client;
+        // client pointer has to be null to avoid delete AsyncClient from onDisconnect callback
+        _client = nullptr;
+        delete c;
     }
     delete _URL;
     delete _headers;
@@ -588,8 +590,8 @@ void  asyncHTTPrequest::_onDisconnect(AsyncClient* client){
         _HTTPcode = HTTPCODE_CONNECTION_LOST;
     }
     if (_client) {
-        delete _client;
         _client = nullptr;
+        delete client;
     }
     if (_connectedHost) {
         delete[] _connectedHost;
