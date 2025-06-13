@@ -415,6 +415,9 @@ bool  asyncHTTPrequest::_connect(){
             DEBUG_HTTP("!client.connect(%s, %d) failed\r\n", _URL->host, _URL->port);
             _HTTPcode = HTTPCODE_NOT_CONNECTED;
             _setReadyState(readyStateDone);
+            AsyncClient *c = _client;
+            _client = nullptr;
+            delete c;
             return false;
         }
     }
@@ -555,6 +558,9 @@ void  asyncHTTPrequest::_onConnect(AsyncClient* client){
 //**************************************************************************************************************
 void  asyncHTTPrequest::_onTimeout(AsyncClient* client, uint32_t time){
     DEBUG_HTTP("_onTimeout = %u", time);
+    if (_client) {
+        _client->close();
+    }
 }
 
 void  asyncHTTPrequest::_onPoll(AsyncClient* client){
