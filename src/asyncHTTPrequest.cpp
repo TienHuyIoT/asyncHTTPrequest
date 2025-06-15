@@ -406,7 +406,7 @@ bool  asyncHTTPrequest::_connect(){
     strcpy(_connectedHost, _URL->host);
     _connectedPort = _URL->port;
     _client->onConnect([](void *obj, AsyncClient *client){((asyncHTTPrequest*)(obj))->_onConnect(client);}, this);
-    _client->onDisconnect([](void *obj, AsyncClient* client){((asyncHTTPrequest*)(obj))->_onDisconnect(client);}, this);
+    _client->onDisconnect([](void *obj, AsyncClient *client){((asyncHTTPrequest *)(obj))->_onDisconnect(client);}, this);
     _client->onTimeout([](void *obj, AsyncClient *client, uint32_t time){((asyncHTTPrequest*)(obj))->_onTimeout(client, time);}, this);
     _client->onPoll([](void *obj, AsyncClient *client){((asyncHTTPrequest*)(obj))->_onPoll(client);}, this);
     _client->onError([](void *obj, AsyncClient *client, uint32_t error){((asyncHTTPrequest*)(obj))->_onError(client, error);}, this);
@@ -595,7 +595,7 @@ void  asyncHTTPrequest::_onDisconnect(AsyncClient* client){
             (_readyState < readyStateHdrsRecvd || (_contentRead + _response->available()) < _contentLength)) {
         _HTTPcode = HTTPCODE_CONNECTION_LOST;
     }
-    if (_client) {
+    if (client) {
         _client = nullptr;
         delete client;
     }
