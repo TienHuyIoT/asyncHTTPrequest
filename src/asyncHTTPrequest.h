@@ -42,9 +42,13 @@
 #include <pgmspace.h>
 #include <xbuf.h>
 
+#if (0)
 #define DEBUG_HTTP(format,...)  if(_debug){\
                                     DEBUG_IOTA_PORT.printf("Debug(%3ld): ", millis()-_requestStartTime);\
                                     DEBUG_IOTA_PORT.printf_P(PSTR(format),##__VA_ARGS__);}
+#else
+#define DEBUG_HTTP(format,...)
+#endif
 
 #define DEFAULT_RX_TIMEOUT 3                    // Seconds for timeout
 
@@ -155,6 +159,7 @@ class asyncHTTPrequest {
     size_t  responseRead(uint8_t* buffer, size_t len);              // Read response into buffer
     uint32_t elapsedTime();                                         // Elapsed time of in progress transaction or last completed (ms)
     String  version();                                              // Version of asyncHTTPrequest
+    AsyncClient *client() { return _client; }
 //___________________________________________________________________________________________________________________________________
 
   private:

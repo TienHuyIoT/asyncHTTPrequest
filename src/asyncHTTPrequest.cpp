@@ -39,12 +39,31 @@ asyncHTTPrequest::~asyncHTTPrequest(){
         _client = nullptr;
         delete c;
     }
-    delete _URL;
-    delete _headers;
-    delete _request;
-    delete _response;
-    delete _chunks;
-    delete[] _connectedHost;
+
+    if (_URL) {
+        delete _URL;
+        _URL = nullptr;
+    }
+    if (_headers) {
+        delete _headers;
+        _headers = nullptr;
+    }
+    if (_request) {
+        delete _request;
+        _request = nullptr;
+    }
+    if (_response) {
+        delete _response;
+        _response = nullptr;
+    }
+    if (_chunks) {
+        delete _chunks;
+        _chunks = nullptr;
+    }
+    if (_connectedHost) {
+        delete[] _connectedHost;
+        _connectedHost = nullptr;
+    }
 #ifdef ESP32
     vSemaphoreDelete(threadLock);
 #endif
@@ -133,7 +152,10 @@ void	asyncHTTPrequest::setTimeout(int seconds){
 bool	asyncHTTPrequest::send(){
     DEBUG_HTTP("send()\r\n");
     _seize;
-    if( ! _buildRequest()) return false;
+    if( ! _buildRequest()) {
+        _release;
+        return false;
+    }
     _send();
     _release;
     return true;
@@ -397,6 +419,7 @@ bool  asyncHTTPrequest::_connect(){
     DEBUG_HTTP("_connect()\r\n");
     if( ! _client){
         _client = new AsyncClient();
+        DEBUG_HTTP("new client() %u\r\n", _client);
     }
     if (_connectedHost) {
         delete[] _connectedHost;
@@ -405,6 +428,7 @@ bool  asyncHTTPrequest::_connect(){
     _connectedHost = new char[strlen(_URL->host) + 1];
     strcpy(_connectedHost, _URL->host);
     _connectedPort = _URL->port;
+    // _client->setRxTimeout(DEFAULT_RX_TIMEOUT);   // rx timeout is handled by asyncHttp
     _client->onConnect([](void *obj, AsyncClient *client){((asyncHTTPrequest*)(obj))->_onConnect(client);}, this);
     _client->onDisconnect([](void *obj, AsyncClient *client){((asyncHTTPrequest *)(obj))->_onDisconnect(client);}, this);
     _client->onTimeout([](void *obj, AsyncClient *client, uint32_t time){((asyncHTTPrequest*)(obj))->_onTimeout(client, time);}, this);
@@ -415,9 +439,6 @@ bool  asyncHTTPrequest::_connect(){
             DEBUG_HTTP("!client.connect(%s, %d) failed\r\n", _URL->host, _URL->port);
             _HTTPcode = HTTPCODE_NOT_CONNECTED;
             _setReadyState(readyStateDone);
-            AsyncClient *c = _client;
-            _client = nullptr;
-            delete c;
             return false;
         }
     }
@@ -459,7 +480,7 @@ bool   asyncHTTPrequest::_buildRequest(){
 size_t  asyncHTTPrequest::_send(){
     if( ! _request) return 0;
     DEBUG_HTTP("_send() %d\r\n", _request->available());
-    if( ! _client->connected() || ! _client->canSend()){
+    if( ! _client->connected() || ! _client->canSend() || _readyState < readyStateOpened){
         DEBUG_HTTP("*can't send\r\n");
         return 0;
     }
@@ -596,12 +617,33 @@ void  asyncHTTPrequest::_onDisconnect(AsyncClient* client){
         _HTTPcode = HTTPCODE_CONNECTION_LOST;
     }
     if (client) {
+        DEBUG_HTTP("delete client() %u\r\n", client);
         _client = nullptr;
         delete client;
     }
     if (_connectedHost) {
         delete[] _connectedHost;
         _connectedHost = nullptr;
+    }
+    if (_URL) {
+        delete _URL;
+        _URL = nullptr;
+    }
+    if (_headers) {
+        delete _headers;
+        _headers = nullptr;
+    }
+    if (_request) {
+        delete _request;
+        _request = nullptr;
+    }
+    if (_response) {
+        delete _response;
+        _response = nullptr;
+    }
+    if (_chunks) {
+        delete _chunks;
+        _chunks = nullptr;
     }
     _connectedPort = -1;
     _requestEndTime = millis();
