@@ -66,20 +66,19 @@
 
 class asyncHTTPrequest {
 
-  struct header {
-	  header*	 	next;
-	  char*			name;
-	  char*			value;
-	  header():
-        next(nullptr), 
-        name(nullptr), 
-        value(nullptr)
-        {};
-	  ~header()
+  struct header
+  {
+    header *next;
+    char *name;
+    char *value;
+    header() : next(nullptr),
+               name(nullptr),
+               value(nullptr) {};
+    ~header()
     {
-        if (name != nullptr) delete[] name; 
-        if (value != nullptr) delete[] value; 
-        if (next != nullptr) delete next;
+      if (name) delete[] name;
+      if (value) delete[] value;
+      if (next) delete next;
     }
   };
 
@@ -109,7 +108,7 @@ class asyncHTTPrequest {
 
     typedef std::function<void(void*, asyncHTTPrequest*, int readyState)> readyStateChangeCB;
     typedef std::function<void(void*, asyncHTTPrequest*, size_t available)> onDataCB;
-	
+  
   public:
     asyncHTTPrequest();
     ~asyncHTTPrequest();
@@ -123,7 +122,7 @@ class asyncHTTPrequest {
     bool    open(const char* /*GET/POST*/, const char* URL);        // Initiate a request
     void    onReadyStateChange(readyStateChangeCB, void* arg = 0);  // Optional event handler for ready state change
                                                                     // or you can simply poll readyState()    
-    void	  setTimeout(int);                                        // overide default timeout (seconds)
+    void    setTimeout(int);                                        // overide default timeout (seconds)
     void    setReqHeader(const char* name, const char* value);      // add a request header 
     void    setReqHeader(const char* name, const __FlashStringHelper* value);
     void    setReqHeader(const __FlashStringHelper *name, const char* value);
@@ -164,8 +163,8 @@ class asyncHTTPrequest {
 
   private:
   
-    enum    {HTTPmethodGET,	HTTPmethodPOST} _HTTPmethod;
-			
+    enum    {HTTPmethodGET,  HTTPmethodPOST} _HTTPmethod;
+      
     enum    readyStates {
                 readyStateUnsent = 0,           // Client created, open not yet called
                 readyStateOpened =  1,          // open() has been called, connected
@@ -198,7 +197,7 @@ class asyncHTTPrequest {
     // request and response String buffers and header list (same queue for request and response).   
 
     xbuf*       _request;                       // Tx data buffer 
-	  xbuf*       _response;                      // Rx data buffer for headers
+    xbuf*       _response;                      // Rx data buffer for headers
     xbuf*       _chunks;                        // First stage for chunked response    
     header*     _headers;                       // request or (readyState > readyStateHdrsRcvd) response headers    
 

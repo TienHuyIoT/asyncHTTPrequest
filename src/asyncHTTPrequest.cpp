@@ -186,9 +186,9 @@ bool	asyncHTTPrequest::send(const char* body){
         return false;
     } 
     _request->write(body);
-    _send();
+    size_t len = _send();
     _release;
-    return true;
+    return (len > 0);
 }
 
 //**************************************************************************************************************
@@ -480,10 +480,11 @@ bool   asyncHTTPrequest::_buildRequest(){
 size_t  asyncHTTPrequest::_send(){
     if( ! _request) return 0;
     DEBUG_HTTP("_send() %d\r\n", _request->available());
-    if( ! _client->connected() || ! _client->canSend() || _readyState < readyStateOpened){
+    if(!_client || ! _client->connected() || ! _client->canSend() || _readyState < readyStateOpened){
         DEBUG_HTTP("*can't send\r\n");
         return 0;
     }
+    _seize;
     size_t supply = _request->available();
     size_t demand = _client->space();
     if(supply > demand) supply = demand;
@@ -501,7 +502,9 @@ size_t  asyncHTTPrequest::_send(){
     }
     _client->send();
     DEBUG_HTTP("*sent %d\r\n", sent);
-    _lastActivity = millis(); 
+    _lastActivity = millis();
+    
+    _release;
     return sent;
 }
 
@@ -579,16 +582,18 @@ void  asyncHTTPrequest::_onConnect(AsyncClient* client){
 //**************************************************************************************************************
 void  asyncHTTPrequest::_onTimeout(AsyncClient* client, uint32_t time){
     DEBUG_HTTP("_onTimeout = %u", time);
-    if (_client) {
-        _client->close();
+    _seize;
+    if (client) {
+        client->close();
     }
+    _release;     
 }
 
 void  asyncHTTPrequest::_onPoll(AsyncClient* client){
     _seize;
     if(_timeout && (millis() - _lastActivity) > (_timeout * 1000)){
-        if (_client) {
-            _client->close();
+        if (client) {
+            client->close();
         }
         _HTTPcode = HTTPCODE_TIMEOUT;
         DEBUG_HTTP("_onPoll timeout\r\n");
@@ -926,26 +931,26 @@ String  asyncHTTPrequest::headers(){
 //**************************************************************************************************************
 asyncHTTPrequest::header*  asyncHTTPrequest::_addHeader(const char* name, const char* value){
 	DEBUG_HTTP("_addHeader %s, %s\r\n", name, value);
+    header** hdr = &_headers;
     _seize;
-    header* hdr = (header*) &_headers;
-    while(hdr->next) {
-        if(strcasecmp(name, hdr->next->name) == 0){
-            header* oldHdr = hdr->next;
-            hdr->next = hdr->next->next;
-            oldHdr->next = nullptr; /* Have to check, should not? */
-            delete oldHdr;
-        }
-        else {
-            hdr = hdr->next;
-        }
-    }
-    hdr->next = new header;
-    hdr->next->name = new char[strlen(name)+1];
-    strcpy(hdr->next->name, name);
-    hdr->next->value = new char[strlen(value)+1];
-    strcpy(hdr->next->value, value);
+	while (*hdr) {
+		if (strcasecmp(name, (*hdr)->name) == 0) {
+			header* oldHdr = *hdr;
+			*hdr = (*hdr)->next;
+			oldHdr->next = nullptr; // Avoid recursive delete to free entire list
+			delete oldHdr;
+		} else {
+			hdr = &(*hdr)->next;
+		}
+	}
+
+	*hdr = new header;
+	(*hdr)->name = new char[strlen(name) + 1];
+	strcpy((*hdr)->name, name);
+	(*hdr)->value = new char[strlen(value) + 1];
+	strcpy((*hdr)->value, value);
     _release;
-    return hdr->next;
+    return *hdr;
 }
 
 //**************************************************************************************************************
