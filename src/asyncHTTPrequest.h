@@ -43,11 +43,6 @@
 #include <xbuf.h>
 
 extern AsyncConsole AsyncHttpConsole;
-#if (1)
-#define DEBUG_HTTP(f_, ...)  AsyncHttpConsole.printf_P(PSTR("I [AsyncHttp] %s(), line %u: " f_ "\r\n"),  __func__, __LINE__, ##__VA_ARGS__)
-#else
-#define DEBUG_HTTP(format,...)
-#endif
 
 #define DEFAULT_RX_TIMEOUT 3                    // Seconds for timeout
 
