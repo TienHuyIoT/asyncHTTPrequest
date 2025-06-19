@@ -342,8 +342,18 @@ bool  asyncHTTPrequest::_parseURL(const char* url){
     if (_URL) {
         delete _URL;
     }
-    _URL = new URL;
-    _URL->buffer = new char[strlen(url) + 8];
+    _URL = new (std::nothrow) URL;
+    if (!_URL) {
+        DEBUG_HTTP("Failed to allocate URL object\r\n");
+        return false;
+    }
+    _URL->buffer = new (std::nothrow) char[strlen(url) + 8];
+    if (!_URL->buffer) {
+        DEBUG_HTTP("Failed to allocate URL buffer\r\n");
+        delete _URL;
+        _URL = nullptr;
+        return false;
+    }
     char *bufptr = _URL->buffer;
     const char *urlptr = url;
 
@@ -422,15 +432,27 @@ bool  asyncHTTPrequest::_parseURL(const char* url){
 //**************************************************************************************************************
 bool  asyncHTTPrequest::_connect(){
     DEBUG_HTTP("_connect()\r\n");
-    if( ! _client){
-        _client = new AsyncClient();
+    if (_URL == nullptr) {
+        DEBUG_HTTP("No URL set\r\n");
+        return false;
+    }
+    if(!_client){
+        _client = new (std::nothrow) AsyncClient();
+        if (!_client) {
+            DEBUG_HTTP("Failed to allocate AsyncClient object\r\n");
+            return false;
+        }
         DEBUG_HTTP("new client() %u\r\n", _client);
     }
     if (_connectedHost) {
         delete[] _connectedHost;
         _connectedHost = nullptr;
     }
-    _connectedHost = new char[strlen(_URL->host) + 1];
+    _connectedHost = new (std::nothrow) char[strlen(_URL->host) + 1];
+    if (!_connectedHost) {
+        DEBUG_HTTP("Failed to allocate connected host buffer\r\n");
+        return false;
+    }
     strcpy(_connectedHost, _URL->host);
     _connectedPort = _URL->port;
     // _client->setRxTimeout(DEFAULT_RX_TIMEOUT);   // rx timeout is handled by asyncHttp
@@ -457,7 +479,17 @@ bool  asyncHTTPrequest::_connect(){
 //**************************************************************************************************************
 bool   asyncHTTPrequest::_buildRequest(){
     DEBUG_HTTP("_buildRequest()\r\n");
-    if( ! _request) _request = new xbuf;
+    if (_URL == nullptr || _headers == nullptr) {
+        DEBUG_HTTP("No URL or headers set\r\n");
+        return false;
+    }
+    if( ! _request) {
+        _request = new (std::nothrow) xbuf;
+        if (_request == nullptr) {
+            DEBUG_HTTP("Failed to allocate request buffer\r\n");
+            return false;
+        }
+    }
     _request->write(_HTTPmethod == HTTPmethodGET ? "GET " : "POST ");
     _request->write(_URL->path);
     _request->write(_URL->query);
@@ -485,22 +517,22 @@ bool   asyncHTTPrequest::_buildRequest(){
 size_t  asyncHTTPrequest::_send(){
     if( ! _request) return 0;
     DEBUG_HTTP("_send() %d\r\n", _request->available());
+    _seize;
     if(!_client || ! _client->connected() || ! _client->canSend() || _readyState < readyStateOpened){
         DEBUG_HTTP("*can't send\r\n");
+        _release;
         return 0;
     }
-    _seize;
     size_t supply = _request->available();
     size_t demand = _client->space();
     if(supply > demand) supply = demand;
     size_t sent = 0;
-    uint8_t* temp = new uint8_t[100];
+    uint8_t temp[100];
     while(supply){
         size_t chunk = supply < 100 ? supply : 100;
         supply -= _request->read(temp, chunk);
         sent += _client->add((char*)temp, chunk);
     }
-    delete[] temp;
     if(_request->available() == 0){
         delete _request;
         _request = nullptr;
@@ -566,29 +598,33 @@ ________________________________________________________________________________
 
 //**************************************************************************************************************
 void  asyncHTTPrequest::_onConnect(AsyncClient* client){
-    DEBUG_HTTP("_onConnect handler\r\n");
+    DEBUG_HTTP("handler client %u\r\n", client);
     _seize;
-    _client = client;
-    _setReadyState(readyStateOpened);
     if (!_response) {
-        _response = new xbuf;
+        _response = (_client == client) ? new (std::nothrow) xbuf : nullptr ;
+        if (_response == nullptr) {
+            DEBUG_HTTP("Failed to allocate response buffer\r\n");
+            _HTTPcode = HTTPCODE_NOT_CONNECTED;
+            _setReadyState(readyStateDone);
+            _release;
+            return;
+        }
     }
+    _setReadyState(readyStateOpened);
     _contentLength = 0;
     _contentRead = 0;
     _chunked = false;
     _client->onAck([](void* obj, AsyncClient* client, size_t len, uint32_t time){((asyncHTTPrequest*)(obj))->_send();}, this);
     _client->onData([](void* obj, AsyncClient* client, void* data, size_t len){((asyncHTTPrequest*)(obj))->_onData(data, len);}, this);
-    if(_client->canSend()){
-        DEBUG_HTTP("_send() canSend()");
-        _send();
-    }
+    DEBUG_HTTP("_send() canSend()");
+    _send();
     _lastActivity = millis();
     _release;
 }
 
 //**************************************************************************************************************
 void  asyncHTTPrequest::_onTimeout(AsyncClient* client, uint32_t time){
-    DEBUG_HTTP("_onTimeout = %u", time);
+    DEBUG_HTTP("handler client %u, time=%u\r\n", client, time);
     _seize;
     _HTTPcode = HTTPCODE_TIMEOUT;
     if (client) {
@@ -598,6 +634,7 @@ void  asyncHTTPrequest::_onTimeout(AsyncClient* client, uint32_t time){
 }
 
 void  asyncHTTPrequest::_onPoll(AsyncClient* client){
+    DEBUG_HTTP("handler client %u\r\n", client);
     _seize;
     if(_timeout && (millis() - _lastActivity) > (_timeout * 1000)){
         DEBUG_HTTP("_onPoll timeout\r\n");
@@ -614,13 +651,13 @@ void  asyncHTTPrequest::_onPoll(AsyncClient* client){
 
 //**************************************************************************************************************
 void  asyncHTTPrequest::_onError(AsyncClient* client, int8_t error){
-    DEBUG_HTTP("_onError handler error=%d\r\n", error);
+    DEBUG_HTTP("handler client %u error=%d\r\n", client, error);
     _HTTPcode = error;
 }
 
 //**************************************************************************************************************
 void  asyncHTTPrequest::_onDisconnect(AsyncClient* client){
-    DEBUG_HTTP("_onDisconnect handler\r\n");
+    DEBUG_HTTP("handler client %u\r\n", client);
     _seize;
     if(_readyState < readyStateOpened){
         _HTTPcode = HTTPCODE_NOT_CONNECTED;
@@ -785,7 +822,11 @@ bool  asyncHTTPrequest::_collectHeaders(){
         DEBUG_HTTP("*transfer-encoding: chunked\r\n");
         _chunked = true;
         _contentLength = 0;
-        _chunks = new xbuf;
+        _chunks = new (std::nothrow) xbuf;
+        if (!_chunks) {
+            DEBUG_HTTP("Failed to allocate chunk buffer\r\n");
+            return false;
+        }
         _chunks->write(_response, _response->available());
         _processChunks();
     }         
@@ -815,6 +856,10 @@ void	asyncHTTPrequest::setReqHeader(const char* name, const char* value){
 void	asyncHTTPrequest::setReqHeader(const char* name, const __FlashStringHelper* value){
     if(_readyState <= readyStateOpened && _headers){
         char* _value = _charstar(value);
+        if (_value == nullptr) {
+            DEBUG_HTTP("Failed to convert FlashString to char*\r\n");
+            return;
+        }
         _addHeader(name, _value);
         delete[] _value;
     }
@@ -824,6 +869,10 @@ void	asyncHTTPrequest::setReqHeader(const char* name, const __FlashStringHelper*
 void	asyncHTTPrequest::setReqHeader(const __FlashStringHelper *name, const char* value){
     if(_readyState <= readyStateOpened && _headers){
         char* _name = _charstar(name);
+        if (_name == nullptr) {
+            DEBUG_HTTP("Failed to convert FlashString to char*\r\n");
+            return;
+        }
         _addHeader(_name, value);
         delete[] _name;
     }
@@ -834,6 +883,12 @@ void	asyncHTTPrequest::setReqHeader(const __FlashStringHelper *name, const __Fla
     if(_readyState <= readyStateOpened && _headers){
         char* _name = _charstar(name);
         char* _value = _charstar(value);
+        if (_name == nullptr || _value == nullptr) {
+            DEBUG_HTTP("Failed to convert FlashString to char*\r\n");
+            if (_name) delete[] _name;
+            if (_value) delete[] _value;
+            return;
+        }
         _addHeader(_name, _value);
         delete[] _name;
         delete[] _value;
@@ -851,6 +906,10 @@ void	asyncHTTPrequest::setReqHeader(const char* name, int32_t value){
 void	asyncHTTPrequest::setReqHeader(const __FlashStringHelper *name, int32_t value){
     if(_readyState <= readyStateOpened && _headers){
         char* _name = _charstar(name);
+        if (_name == nullptr) {
+            DEBUG_HTTP("Failed to convert FlashString to char*\r\n");
+            return;
+        }
         setReqHeader(_name, String(value).c_str());
         delete[] _name;
     }
@@ -887,7 +946,11 @@ char*   asyncHTTPrequest::respHeaderValue(const char* name){
 //**************************************************************************************************************
 char*   asyncHTTPrequest::respHeaderValue(const __FlashStringHelper *name){
     if(_readyState < readyStateHdrsRecvd) return nullptr;
-    char* _name = _charstar(name);      
+    char* _name = _charstar(name);
+    if (_name == nullptr) {
+        DEBUG_HTTP("Failed to convert FlashString to char*\r\n");
+        return nullptr;
+    }   
     header* hdr = _getHeader(_name);
     delete[] _name;
     if( ! hdr) return nullptr;
@@ -913,7 +976,11 @@ bool	asyncHTTPrequest::respHeaderExists(const char* name){
 //**************************************************************************************************************
 bool	asyncHTTPrequest::respHeaderExists(const __FlashStringHelper *name){
     if(_readyState < readyStateHdrsRecvd) return false;
-    char* _name = _charstar(name);      
+    char* _name = _charstar(name);   
+    if (_name == nullptr) {
+        DEBUG_HTTP("Failed to convert FlashString to char*\r\n");
+        return false;
+    }   
     header* hdr = _getHeader(_name);
     delete[] _name;
     if ( ! hdr) return false;
@@ -940,6 +1007,10 @@ String  asyncHTTPrequest::headers(){
 //**************************************************************************************************************
 asyncHTTPrequest::header*  asyncHTTPrequest::_addHeader(const char* name, const char* value){
 	DEBUG_HTTP("_addHeader %s, %s\r\n", name, value);
+    if (value == nullptr || name == nullptr || strlen(name) == 0 || strlen(value) == 0) {
+        DEBUG_HTTP("Invalid header name or value\r\n");
+        return nullptr;
+    }
     header** hdr = &_headers;
     _seize;
 	while (*hdr) {
@@ -953,10 +1024,29 @@ asyncHTTPrequest::header*  asyncHTTPrequest::_addHeader(const char* name, const 
 		}
 	}
 
-	*hdr = new header;
-	(*hdr)->name = new char[strlen(name) + 1];
+	*hdr = new (std::nothrow) header;
+    if (!*hdr) {
+        DEBUG_HTTP("Failed to allocate header object\r\n");
+        _release;
+        return nullptr;
+    }
+	(*hdr)->name = new (std::nothrow) char[strlen(name) + 1];
+    if (!(*hdr)->name) {
+        DEBUG_HTTP("Failed to allocate header name buffer\r\n");
+        delete *hdr;
+        *hdr = nullptr;
+        _release;
+        return nullptr;
+    };
 	strcpy((*hdr)->name, name);
-	(*hdr)->value = new char[strlen(value) + 1];
+	(*hdr)->value = new (std::nothrow) char[strlen(value) + 1];
+    if (!(*hdr)->value) {
+        DEBUG_HTTP("Failed to allocate header value buffer\r\n");
+        delete *hdr;
+        *hdr = nullptr;
+        _release;
+        return nullptr;
+    }
 	strcpy((*hdr)->value, value);
     _release;
     return *hdr;
@@ -989,7 +1079,11 @@ asyncHTTPrequest::header* asyncHTTPrequest::_getHeader(int ndx){
 //**************************************************************************************************************
 char* asyncHTTPrequest::_charstar(const __FlashStringHelper * str){
   if( ! str) return nullptr;
-  char* ptr = new char[strlen_P((PGM_P)str)+1];
+  char* ptr = new (std::nothrow) char[strlen_P((PGM_P)str)+1];
+  if (!ptr) {
+      DEBUG_HTTP("Failed to allocate char buffer\r\n");
+      return nullptr;
+  }
   strcpy_P(ptr, (PGM_P)str);
   return ptr;
 }
