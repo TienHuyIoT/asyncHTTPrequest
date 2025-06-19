@@ -1,5 +1,7 @@
 #include "asyncHTTPrequest.h"
 
+AsyncConsole AsyncHttpConsole;
+
 //**************************************************************************************************************
 asyncHTTPrequest::asyncHTTPrequest()
     : _readyState(readyStateUnsent)
@@ -260,9 +262,12 @@ String	asyncHTTPrequest::responseText(){
     size_t avail = available();
     String localString = _response->readString(avail);
     if(localString.length() < avail) {
-        DEBUG_HTTP("!responseText() no buffer\r\n")
+        DEBUG_HTTP("!responseText() no buffer\r\n");
         _HTTPcode = HTTPCODE_TOO_LESS_RAM;
-        _client->abort();
+        if (_client) {
+            DEBUG_HTTP("aborting client\r\n");
+            _client->abort();
+        }
         _release;
         return String();
     }
@@ -536,7 +541,8 @@ void  asyncHTTPrequest::_processChunks(){
             char* connectionHdr = respHeaderValue("Connection");
             if(connectionHdr && (strcasecmp_P(connectionHdr,PSTR("close")) == 0)){
                 DEBUG_HTTP("*all chunks received - closing TCP\r\n");
-                _client->close();
+                if (_client) 
+                    _client->close();
             }
             else {
                 DEBUG_HTTP("*all chunks received - no disconnect\r\n"); 
@@ -573,6 +579,7 @@ void  asyncHTTPrequest::_onConnect(AsyncClient* client){
     _client->onAck([](void* obj, AsyncClient* client, size_t len, uint32_t time){((asyncHTTPrequest*)(obj))->_send();}, this);
     _client->onData([](void* obj, AsyncClient* client, void* data, size_t len){((asyncHTTPrequest*)(obj))->_onData(data, len);}, this);
     if(_client->canSend()){
+        DEBUG_HTTP("_send() canSend()");
         _send();
     }
     _lastActivity = millis();
@@ -583,6 +590,7 @@ void  asyncHTTPrequest::_onConnect(AsyncClient* client){
 void  asyncHTTPrequest::_onTimeout(AsyncClient* client, uint32_t time){
     DEBUG_HTTP("_onTimeout = %u", time);
     _seize;
+    _HTTPcode = HTTPCODE_TIMEOUT;
     if (client) {
         client->close();
     }
@@ -592,11 +600,11 @@ void  asyncHTTPrequest::_onTimeout(AsyncClient* client, uint32_t time){
 void  asyncHTTPrequest::_onPoll(AsyncClient* client){
     _seize;
     if(_timeout && (millis() - _lastActivity) > (_timeout * 1000)){
+        DEBUG_HTTP("_onPoll timeout\r\n");
+        _HTTPcode = HTTPCODE_TIMEOUT;
         if (client) {
             client->close();
         }
-        _HTTPcode = HTTPCODE_TIMEOUT;
-        DEBUG_HTTP("_onPoll timeout\r\n");
     }
     if(_onDataCB && available()){
         _onDataCB(_onDataCBarg, this, available());
@@ -701,7 +709,8 @@ void  asyncHTTPrequest::_onData(void* Vbuf, size_t len){
         char* connectionHdr = respHeaderValue("Connection");
         if(connectionHdr && (strcasecmp_P(connectionHdr,PSTR("close")) == 0)){
             DEBUG_HTTP("*all data received - closing TCP\r\n");
-            _client->close();
+            if (_client)
+                _client->close();
         }
         else {
             DEBUG_HTTP("*all data received - no disconnect\r\n");
