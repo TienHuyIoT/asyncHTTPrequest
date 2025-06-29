@@ -3,7 +3,7 @@
 AsyncConsole AsyncHttpConsole;
 #if (1)
 #define DEBUG_HTTP_I(f_, ...)  //AsyncHttpConsole.printf_P(PSTR("I [AsyncHTTP] %s(), line %u: " f_ "\r\n"),  __func__, __LINE__, ##__VA_ARGS__)
-#define DEBUG_HTTP_E(f_, ...)  AsyncHttpConsole.printf_P(PSTR("E [AsyncHTTP] %s(), line %u: " f_ "\r\n"),  __func__, __LINE__, ##__VA_ARGS__)
+#define DEBUG_HTTP_E(f_, ...)  //AsyncHttpConsole.printf_P(PSTR("E [AsyncHTTP] %s(), line %u: " f_ "\r\n"),  __func__, __LINE__, ##__VA_ARGS__)
 #else
 #define DEBUG_HTTP_I(format,...)
 #define DEBUG_HTTP_E(format,...)
@@ -580,11 +580,12 @@ void  asyncHTTPrequest::_processChunks(){
             char* connectionHdr = respHeaderValue("Connection");
             if(connectionHdr && (strcasecmp_P(connectionHdr,PSTR("close")) == 0)){
                 DEBUG_HTTP_I("*all chunks received - closing TCP\r\n");
-                if (_client) 
-                    _client->close();
             }
             else {
-                DEBUG_HTTP_I("*all chunks received - no disconnect\r\n"); 
+                DEBUG_HTTP_I("*all chunks received - no header Connection - closing TCP\r\n"); 
+            }
+            if (_client) {
+                _client->close();
             }
             _requestEndTime = millis();
             _lastActivity = 0;
@@ -667,6 +668,13 @@ void  asyncHTTPrequest::_onError(AsyncClient* client, int8_t error){
 void  asyncHTTPrequest::_onDisconnect(AsyncClient* client){
     DEBUG_HTTP_I("handler client %u\r\n", client);
     _seize;
+
+    _client = nullptr;
+    if (client) {
+        DEBUG_HTTP_I("delete client() %u\r\n", client);
+        delete client;
+    }
+
     if(_readyState < readyStateOpened){
         _HTTPcode = HTTPCODE_NOT_CONNECTED;
     }
@@ -674,11 +682,12 @@ void  asyncHTTPrequest::_onDisconnect(AsyncClient* client){
             (_readyState < readyStateHdrsRecvd || (_contentRead + _response->available()) < _contentLength)) {
         _HTTPcode = HTTPCODE_CONNECTION_LOST;
     }
-    if (client) {
-        DEBUG_HTTP_I("delete client() %u\r\n", client);
-        _client = nullptr;
-        delete client;
-    }
+
+    _connectedPort = -1;
+    _requestEndTime = millis();
+    _lastActivity = 0;
+    _setReadyState(readyStateDone);
+
     if (_connectedHost) {
         delete[] _connectedHost;
         _connectedHost = nullptr;
@@ -703,10 +712,6 @@ void  asyncHTTPrequest::_onDisconnect(AsyncClient* client){
         delete _chunks;
         _chunks = nullptr;
     }
-    _connectedPort = -1;
-    _requestEndTime = millis();
-    _lastActivity = 0;
-    _setReadyState(readyStateDone);
     _release;
 }
 
@@ -741,22 +746,21 @@ void  asyncHTTPrequest::_onData(void* Vbuf, size_t len){
         }
     }
 
-                // If there's data in the buffer and not Done,
-                // advance readyState to Loading.
-
+    // If there's data in the buffer and not Done,
+    // advance readyState to Loading.
     if(_response->available() && _readyState != readyStateDone){
+        DEBUG_HTTP_I("Set readyStateLoading(%u)", readyStateLoading);
         _setReadyState(readyStateLoading);
     }
 
-                // If not chunked and all data read, close it up.
-
-    if( ! _chunked && (_response->available() + _contentRead) >= _contentLength){
+    // If not chunked and all data read, close it up.
+    if( ! _chunked && _contentLength && (_response->available() + _contentRead) >= _contentLength){
         char* connectionHdr = respHeaderValue("Connection");
         if(connectionHdr && (strcasecmp_P(connectionHdr,PSTR("Close")) == 0)){
             DEBUG_HTTP_I("*all data received - closing TCP\r\n");
         }
         else {
-            DEBUG_HTTP_I("*all data received - no disconnect\r\n");
+            DEBUG_HTTP_I("*all data received - no header Connection - closing TCP\r\n");
         }
         if (_client) {
             _client->close();
@@ -794,6 +798,7 @@ bool  asyncHTTPrequest::_collectHeaders(){
             // If empty line, all headers are in, advance readyState.
            
         if(headerLine.length() == 2){
+            DEBUG_HTTP_I("Set readyStateHdrsRecvd(%u)", readyStateHdrsRecvd);
             _setReadyState(readyStateHdrsRecvd);
         }
 
